@@ -1,6 +1,6 @@
 -- Checking null values 
 SELECT * FROM Sales_Transaction WHERE TransactionNo IS NULL ;
-SELECT * FROM Sales_Transaction WHERE [Date] IS NULL ;
+SELECT * FROM Sales_Transaction WHERE TransactionDate IS NULL ;
 SELECT * FROM Sales_Transaction WHERE ProductNo IS NULL ;
 SELECT * FROM Sales_Transaction WHERE ProductName IS NULL ;
 SELECT * FROM Sales_Transaction WHERE Price IS NULL ;
@@ -10,8 +10,8 @@ SELECT * FROM Sales_Transaction WHERE Country IS NULL ;
 
 
 -- Explore data 
-SELECT MIN(Date) MinDate, MAX(Date) MaxDate FROM Sales_Transaction ; --MinDate 2018-12-01, MaxDate 2019-12-09
-SELECT DISTINCT [Country] FROM Sales_Transaction ;
+SELECT MIN(TransactionDate) MinDate, MAX(TransactionDate) MaxDate FROM Sales_Transaction ; --MinDate 2018-12-01, MaxDate 2019-12-09
+SELECT DISTINCT Country FROM Sales_Transaction ;
 SELECT MIN(Price) MinPrice, MIN(Quantity) MinQuantity FROM Sales_Transaction ; --MinQuantity is negative value
 
 
@@ -25,35 +25,35 @@ DELETE FROM Sales_Transaction
 WHERE TransactionNo LIKE 'C%' OR Quantity <= 0 --8585 rows deleted
 
 DELETE FROM Sales_Transaction
-WHERE [Date] >= '2019-12-01' --25012 rows deleted
+WHERE [TransactionDate] >= '2019-12-01' --25012 rows deleted
 
 
 -- Add new columns 
 ALTER TABLE Sales_Transaction
-ADD Amount MONEY
+ADD Amount FLOAT
 UPDATE Sales_Transaction
 SET Amount = Price * Quantity
 
 ALTER TABLE Sales_Transaction
 ADD YearMonth VARCHAR(7)
 UPDATE Sales_Transaction
-SET YearMonth = CONVERT(VARCHAR(7), [Date], 120)
+SET YearMonth = CONVERT(VARCHAR(7), TransactionDate, 120)
 
 ALTER TABLE Sales_Transaction
-ADD [Weekday] VARCHAR(3)
+ADD DayOfWeek VARCHAR(3)
 UPDATE Sales_Transaction
-SET [Weekday] = LEFT(DATENAME(WEEKDAY, [Date]), 3)
+SET DayOfWeek = LEFT(DATENAME(WEEKDAY, TransactionDate), 3)
 
 
 -- 1. The sales trend over the months (and revenue ranking) 
 SELECT
     YearMonth,
-    SUM(Amount) [Revenue],
-    SUM(Amount) - LAG(SUM(Amount), 1) OVER (ORDER BY YearMonth) [RevenueChange],
-    ROUND(  100 * (SUM(Amount) - LAG(SUM(Amount), 1) OVER (ORDER BY YearMonth)) 
+    SUM(Amount) AS Revenue,
+    SUM(Amount) - LAG(SUM(Amount), 1) OVER (ORDER BY YearMonth) AS RevenueChange,
+    ROUND(  100.0 * (SUM(Amount) - LAG(SUM(Amount), 1) OVER (ORDER BY YearMonth)) 
           / LAG(SUM(Amount), 1) OVER (ORDER BY YearMonth)
-          , 2) [PercentageRevenueChange],
-	DENSE_RANK() OVER(ORDER BY SUM(Amount) DESC) [RevenueRank]
+          , 2) AS Percentage_RevenueChange,
+	DENSE_RANK() OVER(ORDER BY SUM(Amount) DESC)  AS RevenueRank
 FROM Sales_Transaction
 GROUP BY YearMonth
 ORDER BY YearMonth ;
@@ -61,11 +61,11 @@ ORDER BY YearMonth ;
 
 -- 2. At which day of the week customers do most of the shopping? 
 SELECT
-	[Weekday],
+	DayOfWeek,
 	COUNT (DISTINCT TransactionNo) AS NumberOfTransactions,
 	SUM(Amount) AS Revenue
 FROM Sales_Transaction
-GROUP BY [Weekday] ;
+GROUP BY DayOfWeek ;
 
 
 -- 3. Market basket analysis 
@@ -113,7 +113,7 @@ ON P.Consequent = I2.ItemID
 SELECT
 	Antecedent,
 	Consequent,
-	Antecedent + N' ---> ' + Consequent AS [Rule],
+	Antecedent + N' ---> ' + Consequent AS AssociationRule,
 	FORMAT(Confidence, 'P') AS Confidence,
 	FORMAT(Lift, 'F') AS Lift
 FROM ##AssociationRule
@@ -126,19 +126,19 @@ WITH Transactions AS
 (
 	SELECT
 		TransactionNo,
-		[Date],
+		TransactionDate,
 		CustomerNo,
 		SUM(Amount) AS TransactionAmount
 	FROM Sales_Transaction
-	GROUP BY TransactionNo, [Date], CustomerNo 
+	GROUP BY TransactionNo, TransactionDate, CustomerNo 
 )
 
 , rfm_metrics AS
 (
 	SELECT
 		CustomerNo,
-		MAX([Date]) AS LastActiveDate,
-		DATEDIFF(DAY, MAX([Date]), (SELECT MAX([Date]) FROM Sales_Transaction)) AS Recency,
+		MAX(TransactionDate) AS LastActiveDate,
+		DATEDIFF(DAY, MAX(TransactionDate), (SELECT MAX(TransactionDate) FROM Sales_Transaction)) AS Recency,
 		COUNT(TransactionNo) AS Frequency,
 		SUM(TransactionAmount) AS Monetary
 	FROM Transactions
@@ -227,11 +227,11 @@ WITH Transactions AS
 (
 	SELECT
 		TransactionNo,
-		[Date],
+		TransactionDate,
 		CustomerNo,
 		SUM(Amount) AS TransactionAmount
 	FROM Sales_Transaction
-	GROUP BY TransactionNo, [Date], CustomerNo 
+	GROUP BY TransactionNo, TransactionDate, CustomerNo 
 )
 
 , rfm_metrics AS
@@ -239,7 +239,7 @@ WITH Transactions AS
 	SELECT
 		CustomerNo,
 		MAX([Date]) AS LastActiveDate,
-		DATEDIFF(DAY, MAX([Date]), (SELECT MAX([Date]) FROM Sales_Transaction)) AS Recency,
+		DATEDIFF(DAY, MAX(TransactionDate), (SELECT MAX(TransactionDate) FROM Sales_Transaction)) AS Recency,
 		COUNT(TransactionNo) AS Frequency,
 		SUM(TransactionAmount) AS Monetary
 	FROM Transactions
