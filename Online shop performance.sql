@@ -1,47 +1,47 @@
 -- Checking null values 
-SELECT * FROM SalesTransaction WHERE TransactionNo IS NULL ;
-SELECT * FROM SalesTransaction WHERE [Date] IS NULL ;
-SELECT * FROM SalesTransaction WHERE ProductNo IS NULL ;
-SELECT * FROM SalesTransaction WHERE ProductName IS NULL ;
-SELECT * FROM SalesTransaction WHERE Price IS NULL ;
-SELECT * FROM SalesTransaction WHERE Quantity IS NULL ;
-SELECT * FROM SalesTransaction WHERE CustomerNo IS NULL ;
-SELECT * FROM SalesTransaction WHERE Country IS NULL ;
+SELECT * FROM Sales_Transaction WHERE TransactionNo IS NULL ;
+SELECT * FROM Sales_Transaction WHERE [Date] IS NULL ;
+SELECT * FROM Sales_Transaction WHERE ProductNo IS NULL ;
+SELECT * FROM Sales_Transaction WHERE ProductName IS NULL ;
+SELECT * FROM Sales_Transaction WHERE Price IS NULL ;
+SELECT * FROM Sales_Transaction WHERE Quantity IS NULL ;
+SELECT * FROM Sales_Transaction WHERE CustomerNo IS NULL ;
+SELECT * FROM Sales_Transaction WHERE Country IS NULL ;
 
 
 -- Explore data 
-SELECT MIN(Date) MinDate, MAX(Date) MaxDate FROM SalesTransaction ; --MinDate 2018-12-01, MaxDate 2019-12-09
-SELECT DISTINCT [Country] FROM SalesTransaction ;
-SELECT MIN(Price) MinPrice, MIN(Quantity) MinQuantity FROM SalesTransaction ; --MinQuantity is negative value
+SELECT MIN(Date) MinDate, MAX(Date) MaxDate FROM Sales_Transaction ; --MinDate 2018-12-01, MaxDate 2019-12-09
+SELECT DISTINCT [Country] FROM Sales_Transaction ;
+SELECT MIN(Price) MinPrice, MIN(Quantity) MinQuantity FROM Sales_Transaction ; --MinQuantity is negative value
 
 
 -- Check cancelled transactions 
-SELECT COUNT(*) FROM SalesTransaction WHERE TransactionNo LIKE'%C%' AND Quantity <= 0 ; --8585 rows
-SELECT COUNT(*) FROM SalesTransaction WHERE TransactionNo LIKE'%C%' OR Quantity <= 0 ; --8585 rows
+SELECT COUNT(*) FROM Sales_Transaction WHERE TransactionNo LIKE'%C%' AND Quantity <= 0 ; --8585 rows
+SELECT COUNT(*) FROM Sales_Transaction WHERE TransactionNo LIKE'%C%' OR Quantity <= 0 ; --8585 rows
 
 
 -- Delete canceled transactions and unsuitable data 
-DELETE FROM SalesTransaction
+DELETE FROM Sales_Transaction
 WHERE TransactionNo LIKE 'C%' OR Quantity <= 0 --8585 rows deleted
 
-DELETE FROM SalesTransaction
+DELETE FROM Sales_Transaction
 WHERE [Date] >= '2019-12-01' --25012 rows deleted
 
 
 -- Add new columns 
-ALTER TABLE SalesTransaction
+ALTER TABLE Sales_Transaction
 ADD Amount MONEY
-UPDATE SalesTransaction
+UPDATE Sales_Transaction
 SET Amount = Price * Quantity
 
-ALTER TABLE SalesTransaction
+ALTER TABLE Sales_Transaction
 ADD YearMonth VARCHAR(7)
-UPDATE SalesTransaction
+UPDATE Sales_Transaction
 SET YearMonth = CONVERT(VARCHAR(7), [Date], 120)
 
-ALTER TABLE SalesTransaction
+ALTER TABLE Sales_Transaction
 ADD [Weekday] VARCHAR(3)
-UPDATE SalesTransaction
+UPDATE Sales_Transaction
 SET [Weekday] = LEFT(DATENAME(WEEKDAY, [Date]), 3)
 
 
@@ -54,7 +54,7 @@ SELECT
           / LAG(SUM(Amount), 1) OVER (ORDER BY YearMonth)
           , 2) [PercentageRevenueChange],
 	DENSE_RANK() OVER(ORDER BY SUM(Amount) DESC) [RevenueRank]
-FROM SalesTransaction
+FROM Sales_Transaction
 GROUP BY YearMonth
 ORDER BY YearMonth ;
 
@@ -64,7 +64,7 @@ SELECT
 	[Weekday],
 	COUNT (DISTINCT TransactionNo) AS NumberOfTransactions,
 	SUM(Amount) AS Revenue
-FROM SalesTransaction
+FROM Sales_Transaction
 GROUP BY [Weekday] ;
 
 
@@ -74,10 +74,10 @@ WITH ##Item AS
 	SELECT
 		ProductNo AS ItemID,
 		COUNT (DISTINCT TransactionNo) AS ItemCount,
-		1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM SalesTransaction) AS ItemSupport
-	FROM SalesTransaction
+		1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM Sales_Transaction) AS ItemSupport
+	FROM Sales_Transaction
 	GROUP BY ProductNo
-	HAVING 1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM SalesTransaction) >= 0.02
+	HAVING 1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM Sales_Transaction) >= 0.02
  )
 
 , ##Pair AS
@@ -86,13 +86,13 @@ WITH ##Item AS
 		S1.ProductNo AS Antecedent,
 		S2.ProductNo AS Consequent,
 		COUNT (DISTINCT S1.TransactionNo) AS PairCount,
-		1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM SalesTransaction) AS PairSupport
-	FROM SalesTransaction S1
-	JOIN SalesTransaction S2
+		1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM Sales_Transaction) AS PairSupport
+	FROM Sales_Transaction S1
+	JOIN Sales_Transaction S2
 	ON S1.TransactionNo = S2.TransactionNo
 	AND S1.ProductNo <> S2.ProductNo
 	GROUP BY S1.ProductNo, S2.ProductNo
-	HAVING 1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM SalesTransaction) >= 0.02
+	HAVING 1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM Sales_Transaction) >= 0.02
  )
 
 , ##AssociationRule AS
@@ -129,7 +129,7 @@ WITH Transactions AS
 		[Date],
 		CustomerNo,
 		SUM(Amount) AS TransactionAmount
-	FROM SalesTransaction
+	FROM Sales_Transaction
 	GROUP BY TransactionNo, [Date], CustomerNo 
 )
 
@@ -138,7 +138,7 @@ WITH Transactions AS
 	SELECT
 		CustomerNo,
 		MAX([Date]) AS LastActiveDate,
-		DATEDIFF(DAY, MAX([Date]), (SELECT MAX([Date]) FROM SalesTransaction)) AS Recency,
+		DATEDIFF(DAY, MAX([Date]), (SELECT MAX([Date]) FROM Sales_Transaction)) AS Recency,
 		COUNT(TransactionNo) AS Frequency,
 		SUM(TransactionAmount) AS Monetary
 	FROM Transactions
@@ -230,7 +230,7 @@ WITH Transactions AS
 		[Date],
 		CustomerNo,
 		SUM(Amount) AS TransactionAmount
-	FROM SalesTransaction
+	FROM Sales_Transaction
 	GROUP BY TransactionNo, [Date], CustomerNo 
 )
 
@@ -239,7 +239,7 @@ WITH Transactions AS
 	SELECT
 		CustomerNo,
 		MAX([Date]) AS LastActiveDate,
-		DATEDIFF(DAY, MAX([Date]), (SELECT MAX([Date]) FROM SalesTransaction)) AS Recency,
+		DATEDIFF(DAY, MAX([Date]), (SELECT MAX([Date]) FROM Sales_Transaction)) AS Recency,
 		COUNT(TransactionNo) AS Frequency,
 		SUM(TransactionAmount) AS Monetary
 	FROM Transactions
