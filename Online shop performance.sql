@@ -57,9 +57,10 @@ INTO ##Sales_Transaction_main -- 497491 clean data records
 FROM ##duplicate_check
 WHERE 
 	Dup_flag = 1
-and TransactionDate < '2019-12-01' ;
+and TransactionDate < '2019-12-01'
+and Country = 'United Kingdom' ;
 
-SELECT * FROM ##Sales_Transaction_main
+
 -- Drop unnecessary column
 ALTER TABLE ##Sales_Transaction_main
 DROP COLUMN Dup_flag ;
@@ -93,7 +94,7 @@ SELECT
 FROM ##Sales_Transaction_main;
 
 
---3. Repeat Customer Ratio (Repeat Purchase Rate)
+--3. Repeat Purchase Rate
 WITH ##Customer_Purchase_history AS
 (
 SELECT
@@ -175,64 +176,21 @@ FROM ##Sales_Transaction_main
 GROUP BY DayOfWeek
 ORDER BY 
 	NumberOfTransactions DESC, 
-	Revenue DESC;
+	Revenue DESC
+;
 
 
--- 3. Market basket analysis (cross-selling recommendations)
-WITH ##Item AS
-(
-	SELECT
-		ProductNo as ItemID,
-		COUNT (DISTINCT TransactionNo) as ItemCount,
-		1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) AS ItemSupport
-	FROM ##Sales_Transaction_main
-	GROUP BY ProductNo
-	HAVING 1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) >= 0.02
- )
-
-, ##Pair AS
-(
-	SELECT
-		S1.ProductNo AS Antecedent,
-		S2.ProductNo AS Consequent,
-		COUNT (DISTINCT S1.TransactionNo) AS PairCount,
-		1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) AS PairSupport
-	FROM ##Sales_Transaction_main S1
-	JOIN ##Sales_Transaction_main S2
-	ON S1.TransactionNo = S2.TransactionNo
-	AND S1.ProductNo <> S2.ProductNo
-	GROUP BY S1.ProductNo, S2.ProductNo
-	HAVING 1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) >= 0.02
- )
-
-, ##AssociationRule AS
-(
-SELECT
-	Antecedent,
-	Consequent,
-	PairCount AS Frequency,
-	1.0 * PairCount / I1.ItemCount AS Confidence,
-	1.0 * PairSupport / (I1.ItemSupport * I2.ItemSupport) AS Lift
-FROM ##Pair P
-JOIN ##Item I1
-ON P.Antecedent = I1.ItemID
-JOIN ##Item I2
-ON P.Consequent = I2.ItemID
-)
-
-SELECT
-	Antecedent,
-	Consequent,
-	Antecedent + N' ---> ' + Consequent AS AssociationRule,
-	Frequency,
-	FORMAT(Confidence, 'P') AS Confidence,
-	FORMAT(Lift, 'F') AS Lift
-FROM ##AssociationRule
-WHERE Lift > 1 AND Confidence >= 0.6
-ORDER BY 
-	Antecedent, 
-	Confidence DESC, 
-	Frequency DESC ;
+-- 3. At which day of the month customers do most of the shopping?
+SELECT 
+	DATEPART(day, TransactionDate) as DayOfMonth,
+	SUM(Amount) as Revenue,
+	COUNT(DISTINCT TransactionNo) as NumberOfTransactions
+FROM ##Sales_Transaction_main
+GROUP BY DATEPART(day, TransactionDate)
+ORDER BY
+	Revenue DESC,
+	NumberOfTransactions DESC
+;
 
 
 -- 4. Customer retention rate
@@ -505,3 +463,67 @@ SELECT
 FROM rfm_segment
 GROUP BY rfm_segment
 ORDER BY 3 DESC ;
+
+
+-- 6. Market basket analysis (cross-selling recommendations)
+WITH ##Item AS
+(
+	SELECT
+		ProductNo as ItemID,
+		COUNT (DISTINCT TransactionNo) as ItemCount,
+		1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) AS ItemSupport
+	FROM ##Sales_Transaction_main
+	GROUP BY ProductNo
+	HAVING 1.0 * COUNT (DISTINCT TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) >= 0.05
+ )
+
+, ##Pair AS
+(
+	SELECT
+		S1.ProductNo AS Antecedent,
+		S2.ProductNo AS Consequent,
+		COUNT (DISTINCT S1.TransactionNo) AS PairCount,
+		1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) AS PairSupport
+	FROM ##Sales_Transaction_main S1
+	JOIN ##Sales_Transaction_main S2
+	ON S1.TransactionNo = S2.TransactionNo
+	AND S1.ProductNo <> S2.ProductNo
+	GROUP BY S1.ProductNo, S2.ProductNo
+	HAVING 1.0 * COUNT (DISTINCT S1.TransactionNo) / (SELECT COUNT (DISTINCT TransactionNo) FROM ##Sales_Transaction_main) >= 0.02
+ )
+
+, ##AssociationRule AS
+(
+SELECT
+	Antecedent,
+	Consequent,
+	PairCount AS Frequency,
+	1.0 * PairCount / I1.ItemCount AS Confidence,
+	1.0 * PairSupport / (I1.ItemSupport * I2.ItemSupport) AS Lift,
+	PairSupport - I1.ItemSupport * I2.ItemSupport AS Leverage
+FROM ##Pair P
+JOIN ##Item I1
+ON P.Antecedent = I1.ItemID
+JOIN ##Item I2
+ON P.Consequent = I2.ItemID
+)
+
+SELECT
+	Antecedent,
+	Consequent,
+	Antecedent + N' ---> ' + Consequent AS AssociationRule,
+	Frequency,
+	FORMAT(Confidence, 'P') AS Confidence,
+	FORMAT(Lift, 'F') AS Lift,
+	Leverage
+FROM ##AssociationRule
+WHERE Lift > 1
+  AND Leverage > 0
+  AND Confidence >= 0.5
+ORDER BY 
+	Antecedent, 
+	Confidence DESC, 
+	Frequency DESC ;
+
+
+
